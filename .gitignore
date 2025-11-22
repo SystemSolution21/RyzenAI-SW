@@ -4,3 +4,10 @@ __pycache__
 *node_modules*
 *.yml
 test.json
+
+# Ignore tutorial-generated folders and their contents (large files)
+data/
+images/
+modelcachekey/
+models/
+cache/
