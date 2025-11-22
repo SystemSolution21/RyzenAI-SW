@@ -18,7 +18,7 @@ from torchvision.models import ResNet50_Weights, resnet50
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_epochs", type=int, default=0)
-    parser.add_argument("--train", action='store_true')
+    parser.add_argument("--train", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -26,7 +26,9 @@ def get_args():
 def load_resnet_model():
     weights = ResNet50_Weights.DEFAULT
     resnet = resnet50(weights=weights)
-    resnet.fc = torch.nn.Sequential(torch.nn.Linear(2048, 64), torch.nn.ReLU(inplace=True), torch.nn.Linear(64, 10))
+    resnet.fc = torch.nn.Sequential(  # type: ignore[assignment]
+        torch.nn.Linear(2048, 64), torch.nn.ReLU(inplace=True), torch.nn.Linear(64, 10)
+    )
     return resnet
 
 
@@ -50,16 +52,29 @@ def prepare_model(num_epochs=0, models_dir="models", data_dir="data"):
 
     # Image preprocessing modules
     transform = transforms.Compose(
-        [transforms.Pad(4), transforms.RandomHorizontalFlip(), transforms.RandomCrop(32), transforms.ToTensor()]
+        [
+            transforms.Pad(4),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(32),
+            transforms.ToTensor(),
+        ]
     )
 
     # CIFAR-10 dataset
-    train_dataset = torchvision.datasets.CIFAR10(root=data_dir, train=True, transform=transform, download=False)
-    test_dataset = torchvision.datasets.CIFAR10(root=data_dir, train=False, transform=transforms.ToTensor())
+    train_dataset = torchvision.datasets.CIFAR10(
+        root=data_dir, train=True, transform=transform, download=False
+    )
+    test_dataset = torchvision.datasets.CIFAR10(
+        root=data_dir, train=False, transform=transforms.ToTensor()
+    )
 
     # Data loader
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=100, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=100, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(
+        dataset=train_dataset, batch_size=100, shuffle=True
+    )
+    test_loader = torch.utils.data.DataLoader(
+        dataset=test_dataset, batch_size=100, shuffle=False
+    )
 
     model = load_resnet_model().to(device)
 
@@ -106,29 +121,34 @@ def prepare_model(num_epochs=0, models_dir="models", data_dir="data"):
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
-            print("Accuracy of the model on the test images: {} %".format(100 * correct / total))
+            print(
+                "Accuracy of the model on the test images: {} %".format(
+                    100 * correct / total
+                )
+            )
 
     # Save the model
     model.to("cpu")
-    torch.save(model, str(models_dir / "resnet_trained_for_cifar10.pt"))
+    torch.save(model, models_dir + "/resnet_trained_for_cifar10.pt")
 
-def export_to_onnx(model, models_dir): 
+
+def export_to_onnx(model, models_dir):
     model.to("cpu")
     dummy_inputs = torch.randn(1, 3, 32, 32)
-    input_names = ['input']
-    output_names = ['output']
-    dynamic_axes = {'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
+    input_names = ["input"]
+    output_names = ["output"]
+    dynamic_axes = {"input": {0: "batch_size"}, "output": {0: "batch_size"}}
     tmp_model_path = str(models_dir / "resnet_trained_for_cifar10.onnx")
     torch.onnx.export(
-            model,
-            dummy_inputs,
-            tmp_model_path,
-            export_params=True,
-            opset_version=17,
-            input_names=input_names,
-            output_names=output_names,
-            dynamic_axes=dynamic_axes,
-        )
+        model,
+        (dummy_inputs,),
+        tmp_model_path,
+        export_params=True,
+        opset_version=17,
+        input_names=input_names,
+        output_names=output_names,
+        dynamic_axes=dynamic_axes,
+    )
 
 
 def main():
@@ -137,8 +157,14 @@ def main():
 
     data_download_path_python = data_dir / "cifar-10-python.tar.gz"
     data_download_path_bin = data_dir / "cifar-10-binary.tar.gz"
-    urllib.request.urlretrieve("https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz", data_download_path_python)
-    urllib.request.urlretrieve("https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz", data_download_path_bin)
+    urllib.request.urlretrieve(
+        "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz",
+        data_download_path_python,
+    )
+    urllib.request.urlretrieve(
+        "https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz",
+        data_download_path_bin,
+    )
     file_python = tarfile.open(data_download_path_python)
     file_python.extractall(data_dir)
     file_python.close()
@@ -146,8 +172,10 @@ def main():
     file_bin.extractall(data_dir)
     file_bin.close()
     if args.train:
-        prepare_model(args.num_epochs, models_dir, data_dir)
-    model = torch.load(str(models_dir / "resnet_trained_for_cifar10.pt"), weights_only=False)
+        prepare_model(args.num_epochs, str(models_dir), str(data_dir))
+    model = torch.load(
+        str(models_dir / "resnet_trained_for_cifar10.pt"), weights_only=False
+    )
     export_to_onnx(model, models_dir)
 
 
