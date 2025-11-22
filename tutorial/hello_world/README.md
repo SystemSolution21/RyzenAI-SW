@@ -6,6 +6,7 @@
 </table>
 
 ## Introduction
+
 This example demonstrates how to port a simple machine learning model to run on the AMD Ryzen AI Neural Processing Unit (NPU). Leveraging the NPU for inference can accelerate performance while offloading work from the CPU and GPU.
 
 In this "Hello World" example, we'll walk through the process of converting a basic ML model to ONNX format, quantizing it, and running the inference on the Ryzen AI NPU. This is a great place to get started on learning the development process with Ryzen AI Software.
@@ -24,17 +25,18 @@ Before running this example, ensure that you have followed the Ryzen AI Installa
 
 Create a clone of the Ryzen AI installation conda environment to add required python packages
 
-```python
-set RYZEN_AI_CONDA_ENV_NAME=ryzen-ai-<version>
-conda create --name hello_world_env --clone %RYZEN_AI_CONDA_ENV_NAME%
+```pwsh
+conda activate ryzen-ai-1.6.1
+$env:RYZEN_AI_CONDA_ENV_NAME="ryzen-ai-1.6.1"
+conda create --name hello_world_env --clone $env:RYZEN_AI_CONDA_ENV_NAME
 conda activate hello_world_env
 ```
 
-Set RyzenAI Environment variable
+Set RyzenAI Environment variable if not set already
 
-```bash
+```pwsh
 # Default location of RyzenAI software installation
-set RYZEN_AI_INSTALLATION_PATH=<Path to RyzenAI Installation>
+$env:RYZEN_AI_INSTALLATION_PATH="C:\Program Files\RyzenAI\1.6.1"
 ```
 
 Install the Python dependencies:
@@ -60,15 +62,19 @@ There are two ways to open the Jupyter Notebook:
    - Follow these steps to launch Jupyter Notebook from the command prompt:
 
      1. **Ensure the correct environment is selected** by running:
+
         ```bash
         python -m ipykernel install --user --name <your-env-name> --display-name "Python (<your-display-name>)"
         ```
-        _Replace `<your-env-name>` with the actual conda environment name._
+
+        *Replace `<your-env-name>` with the actual conda environment name.*
 
      2. **Launch Jupyter Notebook**:
+
         ```bash
         jupyter notebook
         ```
+
         This will open a new browser window or tab with the Jupyter interface.
 
      3. **Open the `hello_world.ipynb` file** from the Jupyter interface.

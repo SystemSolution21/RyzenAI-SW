@@ -1,0 +1,10 @@
+Node Name,Op Type,Activation,Weights,Bias
+/conv1/Conv,Conv,UINT8,INT8,INT8
+/conv2/Conv,Conv,UINT8,INT8,INT8
+/conv3/Conv,Conv,UINT8,INT8,INT8
+/conv4/Conv,Conv,UINT8,INT8,INT8
+/Add,Add,UINT8,,
+
+Op Type,Activation,Weights,Bias
+Conv,UINT8(4),INT8(4),INT8(4)
+Add,UINT8(1),,

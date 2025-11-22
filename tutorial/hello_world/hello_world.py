@@ -1,14 +1,20 @@
-import torch
-import torch.nn as nn
 import os
-import subprocess
-import onnxruntime
-import numpy as np
-import onnx
 import shutil
+import subprocess
 from timeit import default_timer as timer
 
+import numpy as np
+import onnx
+import onnxruntime
+import torch
+import torch.nn as nn
+
+# Quantize Model
+from quark.onnx import ModelQuantizer
+from quark.onnx.quantization.config import Config, get_default_config
+
 torch.manual_seed(0)
+
 
 # Create a simple model
 class SmallModel(nn.Module):
@@ -37,6 +43,7 @@ class SmallModel(nn.Module):
 
         return x
 
+
 # Instantiate the model
 pytorch_model = SmallModel()
 pytorch_model.eval()
@@ -51,25 +58,21 @@ input_size = 224
 dummy_input = torch.rand(batch_size, input_channels, input_size, input_size)
 
 # Prep for ONNX export
-inputs = {"x": dummy_input}
-dynamic_axes = {'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
+dynamic_axes = {"input": {0: "batch_size"}, "output": {0: "batch_size"}}
 tmp_model_path = "models/helloworld.onnx"
 
 # Call export function
 torch.onnx.export(
-        pytorch_model,
-        inputs,
-        tmp_model_path,
-        export_params=True,
-        opset_version=17,  # Recommended opset
-        input_names=['input'],
-        output_names=['output'],
-        dynamic_axes=dynamic_axes,
-    )
+    pytorch_model,
+    (dummy_input,),
+    tmp_model_path,
+    export_params=True,
+    opset_version=17,  # Recommended opset
+    input_names=["input"],
+    output_names=["output"],
+    dynamic_axes=dynamic_axes,
+)
 
-# Quantize Model
-from quark.onnx.quantization.config import Config, get_default_config
-from quark.onnx import ModelQuantizer
 
 # `input_model_path` is the path to the original, unquantized ONNX model.
 input_model_path = "models/helloworld.onnx"
@@ -88,60 +91,78 @@ print("The configuration of the quantization is {}".format(config))
 quantizer = ModelQuantizer(config)
 
 # Quantize the ONNX model
-quant_model = quantizer.quantize_model(model_input = input_model_path,
-                                       model_output = output_model_path,
-                                       calibration_data_path = None)
+quant_model = quantizer.quantize_model(
+    model_input=input_model_path,
+    model_output=output_model_path,
+    calibration_data_path=None,
+)
 
-print('Calibrated and quantized model saved at:', output_model_path)
+print("Calibrated and quantized model saved at:", output_model_path)
 
 # Run Model on CPU Run
 
 # Specify the path to the quantized ONNZ Model
-quantized_model_path = r'./models/helloworld_quantized.onnx'
+quantized_model_path = r"./models/helloworld_quantized.onnx"
 model = onnx.load(quantized_model_path)
 
 # Create some random input data for testing
-input_data = np.random.uniform(low=-1, high=1, size=(batch_size, input_channels, input_size, input_size)).astype(np.float32)
+input_data = np.random.uniform(
+    low=-1, high=1, size=(batch_size, input_channels, input_size, input_size)
+).astype(np.float32)
 
 cpu_options = onnxruntime.SessionOptions()
 
 # Create Inference Session to run the quantized model on the CPU
 cpu_session = onnxruntime.InferenceSession(
     model.SerializeToString(),
-    providers = ['CPUExecutionProvider'],
+    providers=["CPUExecutionProvider"],
     sess_options=cpu_options,
 )
 
 # Run Inference
 start = timer()
-cpu_results = cpu_session.run(None, {'input': input_data})
+cpu_results = cpu_session.run(None, {"input": input_data})
 cpu_total = timer() - start
 
 # Run Model on NPU
 
 # Before running, we need to set the ENV variable for the specific NPU we have
 # Run pnputil as a subprocess to enumerate PCI devices
-command = r'pnputil /enum-devices /bus PCI /deviceids '
-process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+command = r"pnputil /enum-devices /bus PCI /deviceids "
+process = subprocess.Popen(
+    command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+)
 stdout, stderr = process.communicate()
 # Check for supported Hardware IDs
-npu_type = ''
-if 'PCI\\VEN_1022&DEV_1502&REV_00' in stdout.decode(): npu_type = 'PHX/HPT'
-if 'PCI\\VEN_1022&DEV_17F0&REV_00' in stdout.decode(): npu_type = 'STX'
-if 'PCI\\VEN_1022&DEV_17F0&REV_10' in stdout.decode(): npu_type = 'STX'
-if 'PCI\\VEN_1022&DEV_17F0&REV_11' in stdout.decode(): npu_type = 'STX'
+npu_type = ""
+if "PCI\\VEN_1022&DEV_1502&REV_00" in stdout.decode(encoding="utf-8", errors="ignore"):
+    npu_type = "PHX/HPT"
+if "PCI\\VEN_1022&DEV_17F0&REV_00" in stdout.decode(encoding="utf-8", errors="ignore"):
+    npu_type = "STX"
+if "PCI\\VEN_1022&DEV_17F0&REV_10" in stdout.decode(encoding="utf-8", errors="ignore"):
+    npu_type = "STX"
+if "PCI\\VEN_1022&DEV_17F0&REV_11" in stdout.decode(encoding="utf-8", errors="ignore"):
+    npu_type = "STX"
 
 print(f"APU Type: {npu_type}")
 
-install_dir = os.environ['RYZEN_AI_INSTALLATION_PATH']
-xclbin_file = ''
+install_dir = os.environ["RYZEN_AI_INSTALLATION_PATH"]
+xclbin_file = ""
 match npu_type:
-    case 'PHX/HPT':
+    case "PHX/HPT":
         print("Setting xclbin file for PHX/HPT")
-        xclbin_file = os.path.join(install_dir, 'voe-4.0-win_amd64', 'xclbins', 'phoenix', '4x4.xclbin')
-    case 'STX':
+        xclbin_file = os.path.join(
+            install_dir, "voe-4.0-win_amd64", "xclbins", "phoenix", "4x4.xclbin"
+        )
+    case "STX":
         print("Setting xclbin file for STX")
-        xclbin_file = os.path.join(install_dir, 'voe-4.0-win_amd64', 'xclbins', 'strix', 'AMD_AIE2P_4x4_Overlay.xclbin')
+        xclbin_file = os.path.join(
+            install_dir,
+            "voe-4.0-win_amd64",
+            "xclbins",
+            "strix",
+            "AMD_AIE2P_4x4_Overlay.xclbin",
+        )
     case _:
         print("Unrecognized APU type. Exiting.")
         exit()
@@ -149,8 +170,8 @@ match npu_type:
 # We want to make sure we compile everytime, otherwise the tools will use the cached version
 # Get the current working directory
 current_directory = os.getcwd()
-directory_path = os.path.join(current_directory,  r'cache\hello_cache')
-cache_directory = os.path.join(current_directory,  r'cache')
+directory_path = os.path.join(current_directory, r"cache\hello_cache")
+cache_directory = os.path.join(current_directory, r"cache")
 
 # Check if the directory exists and delete it if it does.
 if os.path.exists(directory_path):
@@ -163,28 +184,27 @@ else:
 # Compile and run
 
 # Point to the config file path used for the VitisAI Execution Provider
-install_dir = os.environ['RYZEN_AI_INSTALLATION_PATH']
-config_file_path = os.path.join(install_dir, 'voe-4.0-win_amd64', 'vaip_config.json') # Path to the NPU config file
+install_dir = os.environ["RYZEN_AI_INSTALLATION_PATH"]
+config_file_path = os.path.join(
+    install_dir, "voe-4.0-win_amd64", "vaip_config.json"
+)  # Path to the NPU config file
 
 aie_options = onnxruntime.SessionOptions()
 provider_options = [{}]
-if npu_type == 'PHX/HPT':
+if npu_type == "PHX/HPT":
     # For PHX/HPT devices, xclbin is required
-    provider_options = [{
-                    'target': 'X1',
-                    'xclbin': xclbin_file
-                    }]
+    provider_options = [{"target": "X1", "xclbin": xclbin_file}]
 
 aie_session = onnxruntime.InferenceSession(
     model.SerializeToString(),
-    providers=['VitisAIExecutionProvider'],
+    providers=["VitisAIExecutionProvider"],
     sess_options=aie_options,
-    provider_options = provider_options
+    provider_options=provider_options,
 )
 
 # Run Inference
 start = timer()
-npu_results = aie_session.run(None, {'input': input_data})
+npu_results = aie_session.run(None, {"input": input_data})
 npu_total = timer() - start
 
 
